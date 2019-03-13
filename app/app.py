@@ -8,16 +8,28 @@ import sys
 # import MySQLdb
 # import random
 
+# Instantiate the flask RESTful app
 app = Flask(__name__)
+run_on_host = '0.0.0.0'
 
-isDMZ=True
-queueBody=''
-ip = '192.168.2.174'
+# Miscellaneous variables
+isDMZ = False # Set to False if the network is LAN and not connected to the internet
+queueBody = '' # Used by DMZ server for accessing API via a JSON object with the config variables
+
+# Default configuration
+amqpUsername = 'NickLai'
+amqpPassword = 'rmq12490'
+amqpIP = '192.168.2.174'
+amqpPort = '5672'
+amqpVHost = 'Theta'
+
+# Change the IP by passing it as an argument: "i.e. >python app.py 127.0.0.1"
 if len(sys.argv) > 1:
-	ip = str(sys.argv[1])
+	amqpIP = str(sys.argv[1])
 
-credentials = pika.PlainCredentials('NickLai','rmq12490')
-parameters = pika.ConnectionParameters(ip, '5672', 'Theta', credentials)
+# Connection variables used to connect to RabbitMQ via AMQ Protocol
+credentials = pika.PlainCredentials(amqpUsername, amqpPassword)
+parameters = pika.ConnectionParameters(amqpIP, amqpPort, amqpVHost, credentials)
 
 ##################################################### PUBLISH #####################################################
 
@@ -28,6 +40,7 @@ parameters = pika.ConnectionParameters(ip, '5672', 'Theta', credentials)
 @app.route('/publish/<queue>', methods=['POST'])
 def publish(queue):
 
+	# Create the connection
 	connection = pika.BlockingConnection(parameters)
 	channel = connection.channel()
 
@@ -52,12 +65,14 @@ def publish(queue):
 # curl 0.0.0.0:5000/consume/{name-of-queue}
 
 # You sould see a print out of whatever data was sent via the publish route
-# in the python debug console which runs this file
+# in the python debug console which runs this file (i.e. after doing 'python app.py' in terminal)
 
 @app.route('/consume/<queue>', methods=['GET'])
 def consume(queue):
 
 	global queueBody
+
+	# Create the connection
 	connection = pika.BlockingConnection(parameters)
 	channel = connection.channel()
 
@@ -79,19 +94,28 @@ def consume(queue):
 	
 	channel.start_consuming()
 
-	# Code for DMZ script; set the value to False at the top if you're not using a DMZ server
+	# - BEGIN DMZ SCRIPT - Set the value to False at the top if you're not using a DMZ server
+
 	if isDMZ:
-		# API data to be inserted into the API URL
-			# e.g queueBody = {"id": "123", "queue_to_publish": "performances", route_primary": "artist", "route_secondary": "performances"}
+
+		# The following variables are API data points to be inserted into the API URL
+			# i.e. 
+			#	queueBody = {
+			#			"id": "123", 
+			#			"queue_to_publish": "performances", 
+			#			"route_primary": "artist", 
+			#			"route_secondary": "performances"
+			#	}
 
 		# To obtain API from a different source, add these keys to the object:
-			# "api_PROTOCOL": "<http> OR <https>",    <--- The site's http protocol
+			# "api_PROTOCOL": "http OR https",    <--- The site's http protocol
 			# "api_DOMAIN": "site.com"
+
 		default_api_PROTOCOL = "https"
 		default_api_DOMAIN = 'secondhandsongs.com'
-		default_publish_to_queue = 'api'
+		default_queue_to_publish = 'api'
 
-		queue_to_publish = queueBody["queue_to_publish"] if "queue_to_publish" in queueBody else default_publish_to_queue # desired queue to later consume from
+		queue_to_publish = queueBody["queue_to_publish"] if "queue_to_publish" in queueBody else default_queue_to_publish # desired queue to later consume from
 
 		api_PROTOCOL = queueBody["api_protocol"] if "api_protocol" in queueBody else default_api_PROTOCOL # 'http' or 'https'
 		api_DOMAIN = queueBody["api_domain"] if "api_domain" in queueBody else default_api_DOMAIN # the domain of which the api is resolved from
@@ -102,12 +126,15 @@ def consume(queue):
 
 		apiURL = api_PROTOCOL + '://' + api_DOMAIN + '/' + api_ROUTE_PRIMARY + '/' + api_ID + '/' + api_ROUTE_SECONDARY + '?' + api_PARAMS
 
+		# Send the GET request
 		apiResponse = requests.get(url=apiURL)
 
 		# Publish API data to RabbitMQ
 		if apiResponse.ok:
-			# Code for posting API data to RabbitMQ for consumption by non-DMZ servers
+
 			flaskURL = 'http://0.0.0.0:5000/publish/' + queue_to_publish
+
+			# Send the POST request
 			flaskResponse = requests.post(
 					url=flaskURL, 
 					data=json.dumps(apiResponse.json()), 
@@ -121,10 +148,11 @@ def consume(queue):
 
 		# - END DMZ SCRIPT -
 
-	return "HTTP Request Successful (200)\n"
+	return json.dumps(queueBody)
+	# return "HTTP Request Successful (200)\n"
 
 if __name__ == '__main__':
-	app.run(host='0.0.0.0')
+	app.run(host=run_on_host)
 
 # Pika code that seemed interesting:
 
