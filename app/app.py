@@ -30,20 +30,20 @@ def publish(queue):
 	connection = pika.BlockingConnection(parameters)
 	channel = connection.channel()
 
-	content = request.get_json()
-	
+	jsonBody = request.get_json()
+
 	channel.queue_declare(queue=queue)
 
 	channel.basic_publish(exchange='',
                       routing_key=queue,
-                      body=json.dumps(content, ensure_ascii=False))
+                      body=json.dumps(jsonBody, ensure_ascii=False))
 
 	print(" [x] Sent object")
 
 	channel.close()
 	connection.close()
 
-	return str(200)
+	return "HTTP Request Successful (200)\n"
 
 ##################################################### CONSUME #####################################################
 
@@ -81,16 +81,38 @@ def consume(queue):
 	# Code for DMZ script; comment out if you're not using a DMZ server
 
 	# API data to be inserted into the API URL
-	# e.g queueBody = {"id": "123", "route": "performances"}
-	api_ID = queueBody["id"]
-	api_ROUTE = queueBody["route"]
-	URL = 'https://secondhandsongs.com/artist/' + api_ID + '/' + api_ROUTE + '?format=json'
+	# e.g queueBody = {"id": "123", "route-primary": "artist", "route-secondary": "performances"}
 
-	res = requests.get(url=URL)
-	if res.ok:
-	    return jsonify(res.json())
-	else:
-		return "Internal server error (500) while accessing " + URL + "\n"
+	default_api_DOMAIN = 'secondhandsongs.com'
+	default_publish_to_queue = 'api'
+
+	queue_to_publish = queueBody["queue_to_publish"] if "queue_to_publish" in queueBody else default_publish_to_queue # desired queue to later consume from
+
+	api_DOMAIN = queueBody["api_domain"] if "api_domain" in queueBody else default_api_DOMAIN # the domain of which the api is resolved from
+	api_ID = queueBody["id"] # an ID that is used to identify entities within the API
+	api_ROUTE_Primary = queueBody["route_primary"] # a string used to identify the primary root route structure (e.g. "artist")
+	api_ROUTE_Secondary = queueBody["route_secondary"] # a string used to identify a secondary route structure (e.g. artist/123/performances)
+	api_PARAMS = 'format=json' # necessary URL query string(s) to make the API function or return certain data (SHS API requires 'format=json' for JSON responses)
+
+	apiURL = 'https://' + api_DOMAIN + '/' + api_ROUTE_Primary + '/' + api_ID + '/' + api_ROUTE_Secondary + '?' + api_PARAMS
+
+	apiResponse = requests.get(url=apiURL)
+
+	# Publish API data to RabbitMQ
+	if apiResponse.ok:
+		# Code for posting API data to RabbitMQ for consumption by non-DMZ servers
+		flaskURL = 'http://0.0.0.0:5000/publish/' + queue_to_publish
+		flaskResponse = requests.post(
+				url=flaskURL, 
+				data=json.dumps(apiResponse.json()), 
+				headers={'Content-Type': 'application/json'})
+
+		if flaskResponse.ok:
+		    # return json.dumps(flaskResponse)
+		    return "HTTP Request Successful (200)\n"
+		else:
+			return "Internal server error (500) while accessing " + flaskURL + "\n"
+
 	# - END DMZ SCRIPT -
 
 	return "HTTP Request Successful (200)\n"
