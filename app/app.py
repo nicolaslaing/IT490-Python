@@ -8,6 +8,13 @@ import sys
 # import MySQLdb
 # import random
 
+# To run this app in the background, you can add '&' at the end of the terminal command
+	#i.e. >python app.py &
+# Then, you can just exit (Ctrl+C) and continue with whatever you need to do; the program is running in the background
+# To restart, you'll need to lookup the process ID (PID) via the command: 
+	# ps ax | grep app.py
+# Then, kill the process via "kill <PID>"
+
 # Instantiate the flask RESTful app
 app = Flask(__name__)
 run_on_host = '0.0.0.0'
