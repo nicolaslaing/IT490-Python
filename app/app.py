@@ -26,7 +26,7 @@ queueBody = '' # Used by DMZ server for accessing API via a JSON object with the
 # Default configuration
 amqpUsername = 'NickLai'
 amqpPassword = 'rmq12490'
-amqpIP = '192.168.2.174'
+amqpIP = '127.0.0.1'
 amqpPort = '5672'
 amqpVHost = 'Theta'
 
@@ -107,31 +107,29 @@ def consume(queue):
 
 		# The following variables are API data points to be inserted into the API URL
 			# i.e. 
-			#	queueBody = {
-			#			"id": "123", 
+			#	queueBody = { 
 			#			"queue_to_publish": "performances", 
-			#			"route_primary": "artist", 
-			#			"route_secondary": "performances"
+			#			"api_route": "artist/123/performances, 
 			#	}
 
 		# To obtain API from a different source, add these keys to the object:
 			# "api_PROTOCOL": "http OR https",    <--- The site's http protocol
 			# "api_DOMAIN": "site.com"
 
+		default_queue_to_publish = 'api'
 		default_api_PROTOCOL = "https"
 		default_api_DOMAIN = 'secondhandsongs.com'
-		default_queue_to_publish = 'api'
+		default_api_ROUTE = ''
+		default_api_PARAMS = "format=json" # SecondHandSongs API requires 'format=json' for JSON responses
 
 		queue_to_publish = queueBody["queue_to_publish"] if "queue_to_publish" in queueBody else default_queue_to_publish # desired queue to later consume from
 
 		api_PROTOCOL = queueBody["api_protocol"] if "api_protocol" in queueBody else default_api_PROTOCOL # 'http' or 'https'
 		api_DOMAIN = queueBody["api_domain"] if "api_domain" in queueBody else default_api_DOMAIN # the domain of which the api is resolved from
-		api_ID = queueBody["id"] # an ID that is used to identify entities within the API
-		api_ROUTE_PRIMARY = queueBody["route_primary"] # a string used to identify the primary root route structure (e.g. "artist")
-		api_ROUTE_SECONDARY = queueBody["route_secondary"] # a string used to identify a secondary route structure (e.g. artist/123/performances)
-		api_PARAMS = 'format=json' # necessary URL query string(s) to make the API function or return certain data (SHS API requires 'format=json' for JSON responses)
+		api_ROUTE = queueBody["api_route"] if "api_route" in queueBody else default_api_ROUTE # a string used to identify the route structure (e.g. "artist/123/performance")
+		api_PARAMS = queueBody["api_params"] if "api_params" in queueBody else default_api_PARAMS # necessary URL query string(s) to make the API function or return certain data
 
-		apiURL = api_PROTOCOL + '://' + api_DOMAIN + '/' + api_ROUTE_PRIMARY + '/' + api_ID + '/' + api_ROUTE_SECONDARY + '?' + api_PARAMS
+		apiURL = api_PROTOCOL + '://' + api_DOMAIN + '/' + api_ROUTE + '?' + api_PARAMS
 
 		# Send the GET request
 		apiResponse = requests.get(url=apiURL)
@@ -148,14 +146,14 @@ def consume(queue):
 					headers={'Content-Type': 'application/json'})
 
 			if flaskResponse.ok:
-			    # return json.dumps(flaskResponse)
-			    return "HTTP Request Successful (200)\n"
+			    return json.dumps(flaskResponse)
+			    # return "HTTP Request Successful (200)\n"
 			else:
 				return "Internal server error (500) while accessing " + flaskURL + "\n"
 
 		# - END DMZ SCRIPT -
 
-	return json.dumps(queueBody)
+	return json.dumps(queueBody) + "\n"
 	# return "HTTP Request Successful (200)\n"
 
 if __name__ == '__main__':
