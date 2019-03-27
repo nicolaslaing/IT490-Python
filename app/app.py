@@ -30,9 +30,24 @@ amqpIP = '127.0.0.1'
 amqpPort = '5672'
 amqpVHost = 'Theta'
 
-# Change the IP by passing it as an argument: "i.e. >python app.py 127.0.0.1"
+# Arguments (python app.py -arg1 -arg2 -arg3 ...):
+# -ip: Change the RabbitMQ IP
+# -dmz: Indicate you are the DMZ server
 if len(sys.argv) > 1:
-	amqpIP = str(sys.argv[1])
+	if str(sys.argv[1]) == "-ip" and str(sys.argv[3]) == "-dmz":
+		amqpIP = str(sys.argv[2])
+		isDMZ = True
+		print("\n*** Running RabbitMQ on (" + amqpIP + ")\n*** Server is DMZ\n")
+	elif str(sys.argv[1]) == "-ip":
+		amqpIP = str(sys.argv[2])
+		print("\n*** Running RabbitMQ on (" + amqpIP + ")\n*** Server is not DMZ\n")
+	elif str(sys.argv[1]) == "-dmz":
+		isDMZ = True
+		print("\n*** Running RabbitMQ on (" + amqpIP + ")\n*** Server is DMZ\n")
+	else:
+		print("\n*** Running RabbitMQ on (" + amqpIP + ")\n*** Server is not DMZ\n")
+else:
+	print("\n*** No arguments detected\n*** Running RabbitMQ on (" + amqpIP + ")\n*** Server is not DMZ\n")
 
 # Connection variables used to connect to RabbitMQ via AMQ Protocol
 credentials = pika.PlainCredentials(amqpUsername, amqpPassword)
@@ -101,60 +116,61 @@ def consume(queue):
 	
 	channel.start_consuming()
 
-	# - BEGIN DMZ SCRIPT - Set the value to False at the top if you're not using a DMZ server
-
 	if isDMZ:
-
-		# The following variables are API data points to be inserted into the API URL
-			# i.e. 
-			#	queueBody = { 
-			#			"queue_to_publish": "performances", 
-			#			"api_route": "artist/123/performances, 
-			#	}
-
-		# To obtain API from a different source, add these keys to the object:
-			# "api_PROTOCOL": "http OR https",    <--- The site's http protocol
-			# "api_DOMAIN": "site.com"
-
-		default_queue_to_publish = 'api'
-		default_api_PROTOCOL = "https"
-		default_api_DOMAIN = 'secondhandsongs.com'
-		default_api_ROUTE = ''
-		default_api_PARAMS = "format=json" # SecondHandSongs API requires 'format=json' for JSON responses
-
-		queue_to_publish = queueBody["queue_to_publish"] if "queue_to_publish" in queueBody else default_queue_to_publish # desired queue to later consume from
-
-		api_PROTOCOL = queueBody["api_protocol"] if "api_protocol" in queueBody else default_api_PROTOCOL # 'http' or 'https'
-		api_DOMAIN = queueBody["api_domain"] if "api_domain" in queueBody else default_api_DOMAIN # the domain of which the api is resolved from
-		api_ROUTE = queueBody["api_route"] if "api_route" in queueBody else default_api_ROUTE # a string used to identify the route structure (e.g. "artist/123/performance")
-		api_PARAMS = queueBody["api_params"] if "api_params" in queueBody else default_api_PARAMS # necessary URL query string(s) to make the API function or return certain data
-
-		apiURL = api_PROTOCOL + '://' + api_DOMAIN + '/' + api_ROUTE + '?' + api_PARAMS
-
-		# Send the GET request
-		apiResponse = requests.get(url=apiURL)
-
-		# Publish API data to RabbitMQ
-		if apiResponse.ok:
-
-			flaskURL = 'http://0.0.0.0:5000/publish/' + queue_to_publish
-
-			# Send the POST request
-			flaskResponse = requests.post(
-					url=flaskURL, 
-					data=json.dumps(apiResponse.json()), 
-					headers={'Content-Type': 'application/json'})
-
-			if flaskResponse.ok:
-			    return json.dumps(flaskResponse)
-			    # return "HTTP Request Successful (200)\n"
-			else:
-				return "Internal server error (500) while accessing " + flaskURL + "\n"
-
-		# - END DMZ SCRIPT -
+		getAPI()
 
 	return json.dumps(queueBody) + "\n"
 	# return "HTTP Request Successful (200)\n"
+
+# Only the DMZ server is allowed to call this function
+# To enable, send the flag "-dmz" when starting the app.py (i.e. "python app.py -dmz")
+def getAPI():
+	# The following variables are API data points to be inserted into the API URL
+		# i.e. 
+		#	queueBody = { 
+		#			"queue_to_publish": "performances", 
+		#			"api_route": "artist/123/performances, 
+		#	}
+
+	# To obtain API from a different source, add these keys to the object:
+		# "api_PROTOCOL": "http OR https",    <--- The site's http protocol
+		# "api_DOMAIN": "site.com"
+
+	default_queue_to_publish = 'api'
+	default_api_PROTOCOL = "https"
+	default_api_DOMAIN = 'secondhandsongs.com'
+	default_api_ROUTE = ''
+	default_api_PARAMS = "format=json" # SecondHandSongs API requires 'format=json' for JSON responses
+
+	queue_to_publish = queueBody["queue_to_publish"] if "queue_to_publish" in queueBody else default_queue_to_publish # desired queue to later consume from
+
+	api_PROTOCOL = queueBody["api_protocol"] if "api_protocol" in queueBody else default_api_PROTOCOL # 'http' or 'https'
+	api_DOMAIN = queueBody["api_domain"] if "api_domain" in queueBody else default_api_DOMAIN # the domain of which the api is resolved from
+	api_ROUTE = queueBody["api_route"] if "api_route" in queueBody else default_api_ROUTE # a string used to identify the route structure (e.g. "artist/123/performance")
+	api_PARAMS = queueBody["api_params"] if "api_params" in queueBody else default_api_PARAMS # necessary URL query string(s) to make the API function or return certain data
+
+	api_URL = api_PROTOCOL + '://' + api_DOMAIN + '/' + api_ROUTE + '?' + api_PARAMS
+
+	# Send the GET request
+	apiResponse = requests.get(url=api_URL)
+
+	# Publish API data to RabbitMQ
+	if apiResponse.ok:
+
+		flaskURL = 'http://0.0.0.0:5000/publish/' + queue_to_publish
+
+		# Send the POST request
+		flaskResponse = requests.post(
+				url=flaskURL, 
+				data=json.dumps(apiResponse.json()), 
+				headers={'Content-Type': 'application/json'})
+
+		if flaskResponse.ok:
+		    return json.dumps(flaskResponse)
+		    # return "HTTP Request Successful (200)\n"
+		else:
+			return "Internal server error (500) while accessing " + flaskURL + "\n"
+
 
 if __name__ == '__main__':
 	app.run(host=run_on_host)
