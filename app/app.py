@@ -24,9 +24,9 @@ isDMZ = False # Set to False if the network is LAN and not connected to the inte
 queueBody = '' # Used by DMZ server for accessing API via a JSON object with the config variables
 
 # Default configuration
-amqpUsername = 'NickLai'
-amqpPassword = 'rmq12490'
-amqpIP = '127.0.0.1'
+amqpUsername = 'nicolas'
+amqpPassword = 'rmq123!'
+amqpIP = '192.168.0.10'
 amqpPort = '5672'
 amqpVHost = 'Theta'
 
